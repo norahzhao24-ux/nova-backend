@@ -36,7 +36,6 @@ friendly_names = {
     "acne3": "Severe Acne"
 }
 
-# ⭐ NEW: Professional Acne Severity Descriptions
 acne_descriptions = {
     "acne0": "Your skin shows no visible acne or inflammation. This indicates a stable skin barrier and healthy pore activity.",
     "acne1": "You have small, occasional breakouts or clogged pores. This level is very manageable and often responds well to gentle, consistent care.",
@@ -222,7 +221,6 @@ async def predict(file: UploadFile = File(...)):
     with torch.no_grad():
         preds = model(x)
         idx = torch.argmax(preds, dim=1).item()
-        confidence = float(torch.softmax(preds, dim=1)[0][idx])
 
     acne_label = label_names[idx]
     friendly_label = friendly_names[acne_label]
@@ -231,16 +229,54 @@ async def predict(file: UploadFile = File(...)):
 
     roughness_score = int(np.std(np.mean(np_img, axis=2)) * 2)
 
+    # -----------------------------
+    # ⭐ Improved Skin Health Score
+    # -----------------------------
+    score = 100
+
+    acne_penalty = {
+        "acne0": 0,
+        "acne1": 10,
+        "acne2": 25,
+        "acne3": 40
+    }[acne_label]
+
+    redness_penalty = {
+        "low": 0,
+        "mild": 5,
+        "moderate": 12,
+        "high": 20
+    }[redness_level]
+
+    roughness_penalty = min(20, roughness_score // 3)
+
+    lesion_penalty = {
+        "none": 0,
+        "micro_papules": 5,
+        "papules": 10,
+        "pustules": 15,
+        "nodules": 20,
+        "deep_lesion": 25,
+        "comedone_like": 8,
+        "enlarged_pores": 6
+    }[lesion_key]
+
+    total_penalty = acne_penalty + redness_penalty + roughness_penalty + lesion_penalty
+    skin_health_score = max(0, 100 - total_penalty)
+
+    # -----------------------------
+    # Response
+    # -----------------------------
     return {
         "acne_severity": friendly_label,
-        "acne_description": acne_descriptions[acne_label],   # ⭐ NEW FIELD
+        "acne_description": f"{friendly_label} — {acne_descriptions[acne_label]}",
         "model_label": acne_label,
         "redness_level": redness_descriptions[redness_level],
         "skin_type": skin_type_descriptions[skin_type],
         "lesion_type": lesion_descriptions[lesion_key],
         "rosacea": rosacea_descriptions[rosacea_key],
         "surface_roughness_score": roughness_score,
-        "skin_health_score": int(confidence * 100)
+        "skin_health_score": skin_health_score
     }
 
 # -----------------------------
